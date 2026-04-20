@@ -1,9 +1,13 @@
 #include <Windows.h>
 #include <cstdint>
 #include <string>
+#include <filesystem>
+#include <fstream>   
+#include <chrono>
 
-// ---Log関数 ---
-void Log(const std::string& message) {
+// ファイルと出力ウィンドウ両方に出す関数 ---
+void Log(std::ostream& os, const std::string& message) {
+    os << message << std::endl;
     OutputDebugStringA(message.c_str());
 }
 
@@ -40,6 +44,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+
+    // logsディレクトリを用意
+    std::filesystem::create_directory("logs");
+
+    // --- スライド「現在時刻でログファイル生成」 ---
+    auto now = std::chrono::system_clock::now();
+    auto nowSeconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
+    std::chrono::zoned_time localTime{ std::chrono::current_zone(), nowSeconds };
+    std::string dateString = std::format("{:%Y%m%d_%H%M%S}", localTime);
+    std::string logFilePath = std::string("logs/") + dateString + ".log";
+    std::ofstream logStream(logFilePath);
+
+	//↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたからーいつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー
+    Log(logStream, "Application Started");
 
     WNDCLASS wc{};
     // ウィンドウプロシージャ
@@ -108,6 +126,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // スライドで作った文字列を出力してみる（.c_str()を忘れずに！）
     OutputDebugStringA(str0.c_str());
     OutputDebugStringA(str1.c_str());
+
+    //↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたから。いつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーー
+    Log(logStream, "Application Ended");
 
 
 
