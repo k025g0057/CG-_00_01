@@ -1,5 +1,26 @@
 #include <Windows.h>
 #include <cstdint>
+#include <string>
+
+// ---Log関数 ---
+void Log(const std::string& message) {
+    OutputDebugStringA(message.c_str());
+}
+
+// ConvertString関数 ---
+std::wstring ConvertString(const std::string& str) {
+    auto size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+    std::wstring strTo(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &strTo[0], size_needed);
+    return strTo;
+}
+
+std::string ConvertString(const std::wstring& str) {
+    auto size_needed = WideCharToMultiByte(CP_ACP, 0, &str[0], (int)str.size(), NULL, 0, NULL, NULL);
+    std::string strTo(size_needed, 0);
+    WideCharToMultiByte(CP_ACP, 0, &str[0], (int)str.size(), &strTo[0], size_needed, NULL, NULL);
+    return strTo;
+}
 
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
@@ -73,8 +94,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         }
     }
 
+   
+
+     // 1. 文字列を格納する 
+    std::string str0{ "STRING!!!" };
+
+    // 2. 整数を文字列にする 
+    std::string str1{ std::to_string(10) };
+
     // 出力ウィンドウへの文字出力
     OutputDebugStringA("Hello, DirectX!\n");
+
+    // スライドで作った文字列を出力してみる（.c_str()を忘れずに！）
+    OutputDebugStringA(str0.c_str());
+    OutputDebugStringA(str1.c_str());
+
 
 
     return 0;
