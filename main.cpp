@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <string>
+#include <format>
 
 // ---Log関数 ---
 void Log(const std::string& message) {
@@ -57,6 +58,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // クライアント領域のサイズ
     const int32_t kClientWidth = 1280;
     const int32_t kClientHeight = 720;
+    
+  
 
     // ウィンドウサイズを表す構造体にクライアント領域を入れる
     RECT wrc = { 0, 0, kClientWidth, kClientHeight };
@@ -81,10 +84,26 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // ウィンドウを表示する
     ShowWindow(hwnd, SW_SHOW);
 
+    // 1. std::string の基本的な使い方（半角のみを使用）
+    std::string str0{ "STRING!!!" };
+    std::string str1{ std::to_string(10) };
+
+    // 2. 変数の準備
+    int enemyHp = 150;
+    std::string texturePath = "resources/player.png";
+
+    // 3. 自作の Log 関数を使って出力
+    Log("Hello, DirectX!\n");
+    Log(str0 + "\n");
+    Log(str1 + "\n");
+
+    // 4. std::format を使った実践的な出力
+    // ※すべて半角英数で記述されています
+    Log(std::format("enemyHp:{}, texturePath:{}\n", enemyHp, texturePath));
+
     MSG msg{};
     // ウィンドウの×ボタンが押されるまでループ
     while (msg.message != WM_QUIT) {
-        // Windowにメッセージが来てたら最優先で処理させる
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
@@ -93,23 +112,5 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             // ゲームの処理
         }
     }
-
-   
-
-     // 1. 文字列を格納する 
-    std::string str0{ "STRING!!!" };
-
-    // 2. 整数を文字列にする 
-    std::string str1{ std::to_string(10) };
-
-    // 出力ウィンドウへの文字出力
-    OutputDebugStringA("Hello, DirectX!\n");
-
-    // スライドで作った文字列を出力してみる（.c_str()を忘れずに！）
-    OutputDebugStringA(str0.c_str());
-    OutputDebugStringA(str1.c_str());
-
-
-
     return 0;
 }
