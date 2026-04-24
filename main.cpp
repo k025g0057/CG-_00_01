@@ -7,6 +7,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <cassert>
+#include <format>
 
 //libのリンク-- -
 #pragma comment(lib, "d3d12.lib")
@@ -18,6 +19,10 @@
 // ファイルと出力ウィンドウ両方に出す関数 ---
 void Log(std::ostream& os, const std::string& message) {
     os << message << std::endl;
+    OutputDebugStringA(message.c_str());
+}
+
+void Log(const std::string& message) {
     OutputDebugStringA(message.c_str());
 }
 
@@ -109,6 +114,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // ウィンドウを表示する
     ShowWindow(hwnd, SW_SHOW);
 
+    // 1. std::string の基本的な使い方（半角のみを使用）
+    std::string str0{ "STRING!!!" };
+    std::string str1{ std::to_string(10) };
+
+    // 2. 変数の準備
+    int enemyHp = 150;
+    std::string texturePath = "resources/player.png";
+
+    // 3. 自作の Log 関数を使って出力
+    Log(logStream, "Hello, DirectX!\n");
+    Log(logStream, str0 + "\n");
+    Log(logStream, str1 + "\n");
+
+    // 4. std::format を使った実践的な出力
+    // ※すべて半角英数で記述されています
+    Log(logStream, std::format("enemyHp:{}, texturePath:{}\n", enemyHp, texturePath));
+
     // DXGIファクトリーの生成
     IDXGIFactory7* dxgiFactory = nullptr;
 
@@ -183,22 +205,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             // ゲームの処理
         }
     }
-
-   
-
-     // 1. 文字列を格納する 
-    std::string str0{ "STRING!!!" };
-
-    // 2. 整数を文字列にする 
-    std::string str1{ std::to_string(10) };
-
-    // 出力ウィンドウへの文字出力
-    OutputDebugStringA("Hello, DirectX!\n");
-
-    // スライドで作った文字列を出力してみる（.c_str()を忘れずに！）
-    OutputDebugStringA(str0.c_str());
-    OutputDebugStringA(str1.c_str());
-
     //↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたから。いつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーー
     Log(logStream, "Application Ended");
 
