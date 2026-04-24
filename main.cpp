@@ -9,13 +9,12 @@
 #include <cassert>
 #include <dbghelp.h>
 #include <strsafe.h>
+#include <format>
 
 //libのリンク-- -
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "Dbghelp.lib")
-
-
 
 // --- スライド「CrashHandlerの登録」: 関数定義 ---
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
@@ -51,7 +50,6 @@ static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
 
 }
 
-
 // ファイルと出力ウィンドウ両方に出す関数 ---
 void Log(std::ostream& os, const std::string& message) {
     os << message << std::endl;
@@ -73,6 +71,20 @@ std::string ConvertString(const std::wstring& str) {
     return strTo;
 }
 
+// --- スライド「DescriptorHeap作成の関数化」: WinMainより上で定義 ---
+ID3D12DescriptorHeap* CreateDescriptorHeap(
+    ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible)
+{
+    ID3D12DescriptorHeap* descriptorHeap = nullptr;
+    D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+    descriptorHeapDesc.Type = heapType;
+    descriptorHeapDesc.NumDescriptors = numDescriptors;
+    descriptorHeapDesc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    HRESULT hr = device->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&descriptorHeap));
+    assert(SUCCEEDED(hr));
+    return descriptorHeap;
+}
+
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
     WPARAM wparam, LPARAM lparam) {
@@ -92,11 +104,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
-    
     SetUnhandledExceptionFilter(ExportDump);
-
-    uint32_t* p = nullptr; // 故意にクラッシュさせるためのポインた
-    *p = 100; // 故意にクラッシュさせるためのコード
 
     // logsディレクトリを用意
     std::filesystem::create_directory("logs");
@@ -109,7 +117,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     std::string logFilePath = std::string("logs/") + dateString + ".log";
     std::ofstream logStream(logFilePath);
 
-	//↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたからーいつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー
+    //↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたからーいつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー
     Log(logStream, "Application Started");
 
     WNDCLASS wc{};
@@ -152,6 +160,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // ウィンドウを表示する
     ShowWindow(hwnd, SW_SHOW);
 
+    // 1. std::string の基本的な使い方（半角のみを使用）
+    std::string str0{ "STRING!!!" };
+    std::string str1{ std::to_string(10) };
+
+    // 2. 変数の準備
+    int enemyHp = 150;
+    std::string texturePath = "resources/player.png";
+
+    // 3. 自作の Log 関数を使って出力
+    Log(logStream, "Hello, DirectX!\n");
+    Log(logStream, str0 + "\n");
+    Log(logStream, str1 + "\n");
+
+    // 4. std::format を使った実践的な出力
+    // ※すべて半角英数で記述されています
+    Log(logStream, std::format("enemyHp:{}, texturePath:{}\n", enemyHp, texturePath));
+
     // DXGIファクトリーの生成
     IDXGIFactory7* dxgiFactory = nullptr;
 
@@ -189,7 +214,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     assert(useAdapter != nullptr);
 
 
-    // --- スライド「D3D12Deviceの生成」 ---
+    // ---「D3D12Deviceの生成」 ---
     ID3D12Device* device = nullptr;
 
     // 機能レベルとログ出力用の文字列
@@ -214,6 +239,84 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     assert(device != nullptr);
     Log(logStream, "Complete create D3D12Device!!!\n"); // 初期化完了のログをだす
 
+
+    // --- スライドCG01_00の６．７スライドーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー ---
+    ID3D12CommandQueue* commandQueue = nullptr;
+    D3D12_COMMAND_QUEUE_DESC commandQueueDesc{};
+    hr = device->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&commandQueue));
+    // コマンドキューの生成がうまくいかなかったので起動できない
+    assert(SUCCEEDED(hr));
+    Log(logStream, "Complete create D3D12CommandQueue!!!\n");
+
+    // --- スライド「コマンドアロケータを生成する」 ---
+    ID3D12CommandAllocator* commandAllocator = nullptr;
+    hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
+    // コマンドアロケータの生成がうまくいかなかったので起動できない
+    assert(SUCCEEDED(hr));
+    Log(logStream, "Complete create D3D12CommandAllocator!!!\n");
+
+    // --- スライド「コマンドリストを生成する」 ---
+    ID3D12GraphicsCommandList* commandList = nullptr;
+    hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, nullptr, IID_PPV_ARGS(&commandList));
+    // コマンドリストの生成がうまくいかなかったので起動できない
+    assert(SUCCEEDED(hr));
+    Log(logStream, "Complete create D3D12GraphicsCommandList!!!\n");
+    //ここまでーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー
+
+    // --- スライド「スワップチェーンを生成する」 ---
+    IDXGISwapChain4* swapChain = nullptr;
+    DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
+    swapChainDesc.Width = kClientWidth;     // 画面の幅。ウィンドウのクライアント領域を同じものにする
+    swapChainDesc.Height = kClientHeight;   // 画面の高さ。ウィンドウのクライアント領域を同じものにする
+    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // 色の形式
+    swapChainDesc.SampleDesc.Count = 1;     // マルチサンプルしない
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // 描画のターゲットとして使う
+    swapChainDesc.BufferCount = 2;          // ダブルバッファ
+    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // モニタに移したら、中身を破棄
+    // コマンドキュー、ウィンドウハンドル、設定を渡して生成する
+    hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(&swapChain));
+    assert(SUCCEEDED(hr));
+    Log(logStream, "Complete create DXGISwapChain4!!!\n");
+
+    // --- スライド「RTV用ディスクリプタヒープの生成」 ---
+    // ディスクリプタヒープの生成 (定義順を修正)
+    ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
+    Log(logStream, "Complete create RTV DescriptorHeap!!!\n");
+
+    ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
+    Log(logStream, "Complete create DSV DescriptorHeap!!!\n");
+
+    // --- スライド「SwapChainからResourceを持ってくる」 ---
+    ID3D12Resource* swapChainResources[2] = { nullptr };
+    for (UINT i = 0; i < 2; ++i) {
+        hr = swapChain->GetBuffer(i, IID_PPV_ARGS(&swapChainResources[i]));
+        // これが取得できないのは一大事
+        assert(SUCCEEDED(hr));
+    }
+
+    // --- スライド「RTVを作ろう」 ---
+    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
+    rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; // 出力結果をSRGBに変換して書き込む
+    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D; // 2Dテクスチャとして作成
+
+    // ディスクリプタの先頭を取得
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvStartHandle = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
+    // RTVを2つ作るのでディスクリプタハンドルも2つ
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[2];
+
+    // 1つ目
+    rtvHandles[0] = rtvStartHandle;
+    device->CreateRenderTargetView(swapChainResources[0], &rtvDesc, rtvHandles[0]);
+
+    // 2つ目（1つ目の後ろに作る）
+    rtvHandles[1].ptr = rtvHandles[0].ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    device->CreateRenderTargetView(swapChainResources[1], &rtvDesc, rtvHandles[1]);
+
+    Log(logStream, "Complete create RTVs!!!\n");
+
+
+
     MSG msg{};
     // ウィンドウの×ボタンが押されるまでループ
     while (msg.message != WM_QUIT) {
@@ -224,28 +327,38 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         }
         else {
             // ゲームの処理
+
+            // これから書き込むバックバッファのインデックスを取得
+            UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
+
+            // 描画先のRTVを設定する
+            commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
+
+            // 指定した色で画面全体をクリアする
+            float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f }; // 青っぽい色
+            commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+
+            // コマンドリストの内容を確定させる
+            hr = commandList->Close();
+            assert(SUCCEEDED(hr));
+
+            // GPUにコマンドリストの実行を行わせる
+            ID3D12CommandList* commandLists[] = { commandList };
+            commandQueue->ExecuteCommandLists(1, commandLists);
+
+            // GPUとOSに画面の交換を行うよう通知する
+            swapChain->Present(1, 0);
+
+            // 次のフレーム用のコマンドリストを準備
+            hr = commandAllocator->Reset();
+            assert(SUCCEEDED(hr));
+            hr = commandList->Reset(commandAllocator, nullptr);
+            assert(SUCCEEDED(hr));
         }
     }
 
-   
-
-     // 1. 文字列を格納する 
-    std::string str0{ "STRING!!!" };
-
-    // 2. 整数を文字列にする 
-    std::string str1{ std::to_string(10) };
-
-    // 出力ウィンドウへの文字出力
-    OutputDebugStringA("Hello, DirectX!\n");
-
-    // スライドで作った文字列を出力してみる（.c_str()を忘れずに！）
-    OutputDebugStringA(str0.c_str());
-    OutputDebugStringA(str1.c_str());
-
     //↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたから。いつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーー
     Log(logStream, "Application Ended");
-
-
 
     return 0;
 }
