@@ -19,7 +19,7 @@
 
 // --- スライド「CrashHandlerの登録」: 関数定義 ---
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
-    // 時刻を取得して、時刻を名前に入れたファイルを作成。Dumpsディレクトリ以下に出力
+    // 時刻を取得して、時刻を名前に入れたファイルを作成。Dumpsディレクトリ以下に出力。
     SYSTEMTIME time;
     GetLocalTime(&time);
 
