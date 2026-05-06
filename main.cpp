@@ -10,15 +10,18 @@
 #include <dbghelp.h>
 #include <strsafe.h>
 #include <format>
+#include <dxgidebug.h>
+
 
 //libのリンク-- -
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "Dbghelp.lib")
+#pragma comment(lib, "dxguid.lib")
 
 // --- スライド「CrashHandlerの登録」: 関数定義 ---
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
-    // 時刻を取得して、時刻を名前に入れたファイルを作成。Dumpsディレクトリ以下に出力
+    // 時刻を取得して、時刻を名前に入れたファイルを作成。Dumpsディレクトリ以下に出力。
     SYSTEMTIME time;
     GetLocalTime(&time);
 
@@ -449,6 +452,35 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
     //↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたから。いつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーー
     Log(logStream, "Application Ended");
+
+    // イベントハンドルを閉じる
+    CloseHandle(fenceEvent);
+
+    // 作成した順の「逆順」で解放するのがセオリーです
+    fence->Release();
+    rtvDescriptorHeap->Release();
+    dsvDescriptorHeap->Release();
+
+    // 配列で管理しているリソースの解放
+    for (int i = 0; i < 2; ++i) {
+        swapChainResources[i]->Release();
+    }
+
+    swapChain->Release();
+    commandList->Release();
+    commandAllocator->Release();
+    commandQueue->Release();
+    device->Release();
+    useAdapter->Release();
+    dxgiFactory->Release();
+
+    IDXGIDebug1* debug;
+    if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
+        debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+        debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
+        debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
+        debug->Release();
+    }
 
     return 0;
 }
