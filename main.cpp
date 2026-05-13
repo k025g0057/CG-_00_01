@@ -28,6 +28,11 @@ struct Vector4 {
     float w;
 };
 
+// --- 追加：マテリアルの構造体定義 ---
+struct Material {
+    Vector4 color;
+};
+
 // --- スライド「CrashHandlerの登録」: 関数定義 ---
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
     // 時刻を取得して、時刻を名前に入れたファイルを作成。Dumpsディレクトリ以下に出力。
@@ -109,6 +114,32 @@ ID3D12DescriptorHeap* CreateDescriptorHeap(
     return descriptorHeap;
 }
 
+// 
+ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes) {
+    // 1. リソース用のヒープの設定
+    D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+    uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; // UploadHeapを使う
+
+    // 2. リソースの設定
+    D3D12_RESOURCE_DESC resourceDesc{};
+    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    resourceDesc.Width = sizeInBytes; // 引数で受け取ったサイズを指定
+    resourceDesc.Height = 1;
+    resourceDesc.DepthOrArraySize = 1;
+    resourceDesc.MipLevels = 1;
+    resourceDesc.SampleDesc.Count = 1;
+    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    // 3. 実際にリソースを作る
+    ID3D12Resource* resource = nullptr;
+    HRESULT hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+        &resourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+        IID_PPV_ARGS(&resource));
+    assert(SUCCEEDED(hr));
+
+    return resource;
+}
+
 IDxcBlob* CompileShader(
     // CompilerするShaderファイルへのパス
     const std::wstring& filePath,
@@ -121,12 +152,12 @@ IDxcBlob* CompileShader(
     std::ostream& logStream)
 {
     // -------------------------------------------------------
-    // 1. hlslファイルを読む
+    // 1. PSHLSLファイルを読む
     // -------------------------------------------------------
     // これからシェーダーをコンパイルする旨をログに出す
     Log(logStream, ConvertString(std::format(L"Begin CompileShader, path:{}, profile:{}\n", filePath, profile)));
 
-    // hlslファイルを読み込む
+    // PSHLSLファイルを読み込む
     IDxcBlobEncoding* shaderSource = nullptr;
     HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
     // 読めなかったら止める
@@ -142,7 +173,7 @@ IDxcBlob* CompileShader(
     // 2. Compileする
     // -------------------------------------------------------
     LPCWSTR arguments[] = {
-        filePath.c_str(),         // コンパイル対象のhlslファイル名
+        filePath.c_str(),         // コンパイル対象のPSHLSLファイル名
         L"-E", L"main",           // エントリーポイントの指定。基本的にmain以外にはしない
         L"-T", profile,           // ShaderProfileの設定
         L"-Zi", L"-Qembed_debug", // デバッグ用の情報を埋め込む
@@ -463,6 +494,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
     descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
+    // RootParameter作成。複数設定できるので配列。今回は結果1つだけなので長さ1の配列
+    D3D12_ROOT_PARAMETER rootParameters[1] = {};
+    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;               // CBVを使う
+    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;          // PixelShaderで使う
+    rootParameters[0].Descriptor.ShaderRegister = 0;                             // レジスタ番号0(b0)とバインド
+    descriptionRootSignature.pParameters = rootParameters;                      // ルートパラメータ配列へのポインタ
+    descriptionRootSignature.NumParameters = _countof(rootParameters);           // 配列の長さ
+
     // 2. シリアライズ
     ID3DBlob* signatureBlob = nullptr;
     ID3DBlob* errorBlob = nullptr;
@@ -551,29 +590,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
     // --- VertexResourceを生成するの内容 ---
 
-    // 頂点リソース用のヒープの設定
-    D3D12_HEAP_PROPERTIES uploadHeapProperties{};
-    uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; // UploadHeapを使う
-
-    // 頂点リソースの設定
-    D3D12_RESOURCE_DESC vertexResourceDesc{};
-    // バッファリソース。テクスチャの場合はまた別の設定をする
-    vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    vertexResourceDesc.Width = sizeof(Vector4) * 3; // リソースのサイズ。今回はVector4を3頂点分
-    // バッファの場合はこれらは1にする決まり
-    vertexResourceDesc.Height = 1;
-    vertexResourceDesc.DepthOrArraySize = 1;
-    vertexResourceDesc.MipLevels = 1;
-    vertexResourceDesc.SampleDesc.Count = 1;
-    // バッファの場合はこれにする決まり
-    vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-    // 実際に頂点リソースを作る
-    ID3D12Resource* vertexResource = nullptr;
-    hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-        &vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-        IID_PPV_ARGS(&vertexResource));
-    assert(SUCCEEDED(hr));
+   ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
 
  
     // --- VertexBufferViewを作成するの内容 ---
@@ -587,6 +604,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // 1頂点あたりのサイズ
     vertexBufferView.StrideInBytes = sizeof(Vector4);
 
+
+
+    // --- MaterialResourceを生成する ---
+// マテリアル用のリソース（CBuffer）を作る
+    ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Material));
+    // マテリアルにデータを書き込むためのポインタ
+    Material* materialData = nullptr;
+    // 書き込むためのアドレスを取得（Map）
+    materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
+    // 今回は赤色（R=1.0, G=0.0, B=0.0, A=1.0）を設定してみる
+    materialData->color = { 1.0f, 0.0f, 0.0f, 1.0f };
 
     // --- Resourceにデータを書き込むの内容 ---
 
@@ -696,6 +724,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f }; // 青っぽい色
             commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 
+            
 
             // --- コマンドを積むの内容 ---
 
@@ -704,6 +733,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
             // RootSignatureを設定。PSOに設定しているけど別途設定が必要
             commandList->SetGraphicsRootSignature(rootSignature);
+
+            //マテリアルCBufferの位置を設定
+            commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+
 
             commandList->SetPipelineState(graphicsPipelineState); // PSOを設定
 
@@ -766,6 +799,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // 解放処理
     vertexResource->Release();
     graphicsPipelineState->Release();
+    materialResource->Release();
     // signatureBlob は既に上で Release 済みなので不要ですが、
     // もし上で消していなければここで消します。
     // signatureBlob->Release(); 
@@ -779,6 +813,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     rootSignature->Release();
     pixelShaderBlob->Release();
     vertexShaderBlob->Release();
+    
 
 
     // イベントハンドルを閉じる
