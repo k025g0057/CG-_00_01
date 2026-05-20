@@ -363,3 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 
 .imgui.ini
+*.log
+/logs
+*.dmp
+Dumps/
