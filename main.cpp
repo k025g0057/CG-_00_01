@@ -28,10 +28,239 @@ struct Vector4 {
     float w;
 };
 
+// 3次元ベクトル
+struct Vector3 {
+    float x;
+    float y;
+    float z;
+};
+
+// Transform構造体
+struct Transform {
+    Vector3 scale;     // 拡大縮小
+    Vector3 rotate;    // 回転（ラジアン）
+    Vector3 translate; // 平行移動
+};
+
+
+
+
 // --- 追加：マテリアルの構造体定義 ---
 struct Material {
     Vector4 color;
 };
+
+struct Matrix4x4 {
+    float m[4][4];
+};
+
+
+struct TransformationMatrix {
+    Matrix4x4 wvp;
+};
+
+
+// 1. 行列の加法
+Matrix4x4 Add(const Matrix4x4& m1, const Matrix4x4& m2);
+
+// 2. 行列の減法
+Matrix4x4 Subtract(const Matrix4x4& m1, const Matrix4x4& m2);
+
+// 3. 行列の積
+Matrix4x4 Multiply(const Matrix4x4& m1, const Matrix4x4& m2);
+
+// 4. 逆行列
+Matrix4x4 Inverse(const Matrix4x4& m);
+
+// 5. 転置行列
+Matrix4x4 Transpose(const Matrix4x4& m);
+
+// 6. 単位行列の作成
+Matrix4x4 MakeIdentity4x4();
+
+
+// 1. 行列の加法
+Matrix4x4 Add(const Matrix4x4& m1, const Matrix4x4& m2) {
+    Matrix4x4 result;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            result.m[i][j] = m1.m[i][j] + m2.m[i][j];
+        }
+    }
+    return result;
+}
+
+// 2. 行列の減法
+Matrix4x4 Subtract(const Matrix4x4& m1, const Matrix4x4& m2) {
+    Matrix4x4 result;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            result.m[i][j] = m1.m[i][j] - m2.m[i][j];
+        }
+    }
+    return result;
+}
+
+// 3. 行列の積 
+Matrix4x4 Multiply(const Matrix4x4& m1, const Matrix4x4& m2) {
+    Matrix4x4 result = { 0 }; // 0で初期化
+    for (int i = 0; i < 4; ++i) { // 左の行
+        for (int j = 0; j < 4; ++j) { // 右の列
+            for (int k = 0; k < 4; ++k) {
+                result.m[i][j] += m1.m[i][k] * m2.m[k][j];
+            }
+        }
+    }
+    return result;
+}
+
+// 4. 逆行列
+Matrix4x4 Inverse(const Matrix4x4& m) {
+    float a[4][8]; // 元の行列と単位行列をくっつけた作業用行列
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            a[i][j] = m.m[i][j];
+            a[i][j + 4] = (i == j) ? 1.0f : 0.0f;
+        }
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        // ピボット選択
+        int pivot = i;
+        for (int j = i + 1; j < 4; ++j) {
+            if (std::abs(a[j][i]) > std::abs(a[pivot][i])) pivot = j;
+        }
+        std::swap(a[i], a[pivot]);
+
+        // 行を正規化
+        float temp = a[i][i];
+        if (std::abs(temp) < 1e-6f) return MakeIdentity4x4(); // エラー時は単位行列を返す
+
+        for (int j = 0; j < 8; ++j) a[i][j] /= temp;
+
+        // 他の行を掃き出し
+        for (int j = 0; j < 4; ++j) {
+            if (i != j) {
+                float factor = a[j][i];
+                for (int k = 0; k < 8; ++k) a[j][k] -= factor * a[i][k];
+            }
+        }
+    }
+
+    Matrix4x4 result;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            result.m[i][j] = a[i][j + 4];
+        }
+    }
+    return result;
+}
+
+// 5. 転置行列 (行と列を入れ替える)
+Matrix4x4 Transpose(const Matrix4x4& m) {
+    Matrix4x4 result;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            result.m[i][j] = m.m[j][i];
+        }
+    }
+    return result;
+}
+
+// 6. 単位行列の作成
+Matrix4x4 MakeIdentity4x4() {
+    return {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+}
+
+//拡大縮小行列
+Matrix4x4 MakeScaleMatrix(const Vector3 & scale) {
+    return {
+        scale.x, 0.0f,    0.0f,    0.0f,
+        0.0f,    scale.y, 0.0f,    0.0f,
+        0.0f,    0.0f,    scale.z, 0.0f,
+        0.0f,    0.0f,    0.0f,    1.0f
+    };
+}
+
+// 平行移動行列
+Matrix4x4 MakeTranslateMatrix(const Vector3& translate) {
+    return {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        translate.x, translate.y, translate.z, 1.0f
+    };
+}
+
+
+// X軸回転行列の実装
+Matrix4x4 MakeRotateXMatrix(float radian) {
+    float s = std::sin(radian);
+    float c = std::cos(radian);
+    return {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, c,    s,    0.0f,
+        0.0f, -s,   c,    0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+}
+
+// Y軸回転行列の実装
+Matrix4x4 MakeRotateYMatrix(float radian) {
+    float s = std::sin(radian);
+    float c = std::cos(radian);
+    return {
+        c,    0.0f, -s,   0.0f, // ここが -s
+        0.0f, 1.0f, 0.0f, 0.0f,
+        s,    0.0f, c,    0.0f, // ここが s
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+}
+
+// Z軸回転行列の実装
+Matrix4x4 MakeRotateZMatrix(float radian) {
+    float s = std::sin(radian);
+    float c = std::cos(radian);
+    return {
+        c,    s,    0.0f, 0.0f,
+        -s,   c,    0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+}
+
+// 3次元アフィン変換行列
+Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate) {
+    Matrix4x4 sMatrix = MakeScaleMatrix(scale);
+    Matrix4x4 rXMatrix = MakeRotateXMatrix(rotate.x);
+    Matrix4x4 rYMatrix = MakeRotateYMatrix(rotate.y);
+    Matrix4x4 rZMatrix = MakeRotateZMatrix(rotate.z);
+    Matrix4x4 tMatrix = MakeTranslateMatrix(translate);
+
+    // 回転行列を合成 (X * Y * Z)
+    Matrix4x4 rXYZMatrix = Multiply(rXMatrix, Multiply(rYMatrix, rZMatrix));
+
+    // 全体を合成 (S * R * T)
+    return Multiply(sMatrix, Multiply(rXYZMatrix, tMatrix));
+}
+
+Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspect, float nearZ, float farZ) {
+    float h = 1.0f / std::tan(fovY / 2.0f);
+    float w = h / aspect;
+    return Matrix4x4{
+        w, 0, 0, 0,
+        0, h, 0, 0,
+        0, 0, farZ / (farZ - nearZ), 1,
+        0, 0, (-nearZ * farZ) / (farZ - nearZ), 0
+    };
+}
+
+                                  
 
 // --- スライド「CrashHandlerの登録」: 関数定義 ---
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
@@ -239,6 +468,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
     // 標準のメッセージ処理を行う
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
+
+
+// Transform変数を作る
+Transform transform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
@@ -494,13 +727,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
     descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-    // RootParameter作成。複数設定できるので配列。今回は結果1つだけなので長さ1の配列
-    D3D12_ROOT_PARAMETER rootParameters[1] = {};
+    D3D12_ROOT_PARAMETER rootParameters[2] = {};
+
+    // [0] マテリアル用 (b0) の設定
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;               // CBVを使う
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;          // PixelShaderで使う
-    rootParameters[0].Descriptor.ShaderRegister = 0;                             // レジスタ番号0(b0)とバインド
+    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;            // 全てのShaderから見えるようにする
+    rootParameters[0].Descriptor.ShaderRegister = 0;                             // レジスタ番号0(b0)
+
+    // ★★★ [1] WVP行列用 (b1) の設定を新しく追加！ ★★★
+    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;               // CBVを使う
+    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;            // 全てのShaderから見えるようにする
+    rootParameters[1].Descriptor.ShaderRegister = 1;                             // レジスタ番号1(b1)
+
+    // 記述構造体にバインド
     descriptionRootSignature.pParameters = rootParameters;                      // ルートパラメータ配列へのポインタ
-    descriptionRootSignature.NumParameters = _countof(rootParameters);           // 配列の長さ
+    descriptionRootSignature.NumParameters = _countof(rootParameters);           // 配列の長さ（自動的に2になります）
 
     // 2. シリアライズ
     ID3DBlob* signatureBlob = nullptr;
@@ -616,6 +857,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // 今回は赤色（R=1.0, G=0.0, B=0.0, A=1.0）を設定してみる
     materialData->color = { 1.0f, 0.0f, 0.0f, 1.0f };
 
+    // WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
+    ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+    // データを書き込む
+    Matrix4x4* wvpData = nullptr;
+    // 書き込むためのアドレスを取得
+    wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
+    // 単位行列を書きこんでおく
+    *wvpData = MakeIdentity4x4();
+
+    // 2. Transform変数を作る
+    Transform transform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
+
+    Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -5.0f} };
+
+    Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+
     // --- Resourceにデータを書き込むの内容 ---
 
     // 頂点リソースにデータを書き込む
@@ -629,6 +886,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     vertexData[1] = { 0.0f, 0.5f, 0.0f, 1.0f };
     // 右下
     vertexData[2] = { 0.5f, -0.5f, 0.0f, 1.0f };
+
+   
 
 
     // --- ViewportとScissor(シザー)の内容 ---
@@ -685,8 +944,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     }
 #endif
 
-
-
+  
     MSG msg{};
     // ウィンドウの×ボタンが押されるまでループ
     while (msg.message != WM_QUIT) {
@@ -697,6 +955,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         }
         else {
             // ゲームの処理
+            transform.rotate.y += 0.03f;
+            Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+            *wvpData = worldMatrix;
+
+            // 1. 毎フレーム、オブジェクトを少しずつ回転させる処理
+            transform.rotate.y += 0.03f;
+
+            // 2. スライド中央に書かれている各種行列の計算
+           // Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+            Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+            Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+            
+
+            
+
 
             // これから書き込むバックバッファのインデックスを取得
             UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -725,7 +998,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 
             
-
             // --- コマンドを積むの内容 ---
 
             commandList->RSSetViewports(1, &viewport); // Viewportを設定
@@ -744,6 +1016,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
             // 形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えておけば良い
             commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            // wvp用のCBufferの場所を設定（スロット1）
+            commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+
 
             // 描画！（DrawCall/ドローコール）。3頂点で1つのインスタンス。
             commandList->DrawInstanced(3, 1, 0, 0);
@@ -797,34 +1073,29 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     Log(logStream, "Application Ended");
 
     // 解放処理
+  // [元からある解放群]
     vertexResource->Release();
     graphicsPipelineState->Release();
     materialResource->Release();
-    // signatureBlob は既に上で Release 済みなので不要ですが、
-    // もし上で消していなければここで消します。
-    // signatureBlob->Release(); 
 
-    // errorBlob は RootSignature 生成時に失敗した時のみ生成されるので
-    // 安全のために if でチェックしてから解放します
-    if (errorBlob) {
-        errorBlob->Release();
-    }
+    // ★追加: 行列リソースの解放
+    if (wvpResource) { wvpResource->Release(); }
 
+    if (errorBlob) { errorBlob->Release(); }
     rootSignature->Release();
     pixelShaderBlob->Release();
     vertexShaderBlob->Release();
-    
 
+    // ★追加: DXC関連の解放
+    if (includeHandler) { includeHandler->Release(); }
+    if (dxcCompiler) { dxcCompiler->Release(); }
+    if (dxcUtils) { dxcUtils->Release(); }
 
-    // イベントハンドルを閉じる
     CloseHandle(fenceEvent);
-
-    // 作成した順の「逆順」で解放するのがセオリーです
     fence->Release();
     rtvDescriptorHeap->Release();
     dsvDescriptorHeap->Release();
 
-    // 配列で管理しているリソースの解放
     for (int i = 0; i < 2; ++i) {
         swapChainResources[i]->Release();
     }
@@ -833,9 +1104,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     commandList->Release();
     commandAllocator->Release();
     commandQueue->Release();
+
+    // ★追加: アダプターとファクトリーの解放
+    if (useAdapter) { useAdapter->Release(); }
+    if (dxgiFactory) { dxgiFactory->Release(); }
+
+    // 最後にデバイスを解放
     device->Release();
-    useAdapter->Release();
-    dxgiFactory->Release();
 
     IDXGIDebug1* debug;
     if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
