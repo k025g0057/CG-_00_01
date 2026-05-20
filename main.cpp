@@ -12,6 +12,13 @@
 #include <format>
 #include <dxgidebug.h>
 #include <dxcapi.h>
+#include "externals/imgui/imgui.h"
+#include "externals/imgui/imgui_impl_dx12.h"
+#include "externals/imgui/imgui_impl_win32.h"
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+
 
 //libのリンク-- -
 #pragma comment(lib, "d3d12.lib")
@@ -19,6 +26,7 @@
 #pragma comment(lib, "Dbghelp.lib")
 #pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "dxcompiler.lib")
+
 
 
 struct Vector4 {
@@ -329,7 +337,7 @@ void Log(std::ostream& os, const std::wstring& message) {
 
 
 
-// --- スライド「DescriptorHeap作成の関数化」: WinMainより上で定義 ---
+// --- 「DescriptorHeap作成の関数化」: WinMainより上で定義 ---
 ID3D12DescriptorHeap* CreateDescriptorHeap(
     ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible)
 {
@@ -456,7 +464,9 @@ IDxcBlob* CompileShader(
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
     WPARAM wparam, LPARAM lparam) {
-    // メッセージに応じてゲーム固有の処理を行う
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
+        return true;
+    }
     switch (msg) {
         // ウィンドウが破棄された
     case WM_DESTROY:
@@ -468,6 +478,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
     // 標準のメッセージ処理を行う
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
+
+
+
+
 
 
 // Transform変数を作る
@@ -670,6 +684,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
     Log(logStream, "Complete create DSV DescriptorHeap!!!\n");
 
+    // SRV用のヒープでディスクリプタの数は128。SRVはShader内で触るものなので、ShaderVisibleはtrue
+    ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
+
     // --- スライド「SwapChainからResourceを持ってくる」 ---
     ID3D12Resource* swapChainResources[2] = { nullptr };
     for (UINT i = 0; i < 2; ++i) {
@@ -677,6 +694,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         // これが取得できないのは一大事
         assert(SUCCEEDED(hr));
     }
+
+    
 
     // --- スライド「RTVを作ろう」 ---
     D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
@@ -910,7 +929,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     scissorRect.top = 0;
     scissorRect.bottom = kClientHeight;
 
-
+    // ImGuiの初期化。詳細はさして重要ではないので解説は省略する。
+// こういうもんである
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui_ImplWin32_Init(hwnd);
+    ImGui_ImplDX12_Init(device,
+        swapChainDesc.BufferCount,
+        rtvDesc.Format,
+        srvDescriptorHeap,
+        srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+        srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Build();
 
 
 
@@ -954,18 +986,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             DispatchMessage(&msg);
         }
         else {
-            // ゲームの処理
-            transform.rotate.y += 0.03f;
+            // imguiのフレーム開始
+            ImGui_ImplDX12_NewFrame();
+            ImGui_ImplWin32_NewFrame();
+            ImGui::NewFrame();
+
+            // 開発用UIの処理。実際に開発用UIを出す場合はここをゲーム固有の処理に置き換える
+            ImGui::ShowDemoWindow();
+
+            // 固定データ・ゲームの更新処理
+            transform.rotate.y += 0.03f; // 毎フレーム回転させる
+
+            // 1. 各種行列の計算合成 (World -> View -> Projection)
             Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-            *wvpData = worldMatrix;
-
-            // 1. 毎フレーム、オブジェクトを少しずつ回転させる処理
-            transform.rotate.y += 0.03f;
-
-            // 2. スライド中央に書かれている各種行列の計算
-           // Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
             Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
             Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+
+
+            // 2. WVP行列を正しく合成してGPUに書き込む
+            *wvpData = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
             
 
             
@@ -997,6 +1036,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f }; // 青っぽい色
             commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 
+            // 描画用のDescriptorHeapの設定
+            ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap };
+            commandList->SetDescriptorHeaps(1, descriptorHeaps);
+
             
             // --- コマンドを積むの内容 ---
 
@@ -1020,11 +1063,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             // wvp用のCBufferの場所を設定（スロット1）
             commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
+            // ImGuiの内部コマンドを生成する
+            ImGui::Render();
 
+            
             // 描画！（DrawCall/ドローコール）。3頂点で1つのインスタンス。
             commandList->DrawInstanced(3, 1, 0, 0);
 
-
+            // 実際のcommandListのImGuiの描画コマンドを積む
+            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 
 
             // 画面に描く処理はすべて終わり、画面に映すので、状態を遷移
@@ -1072,21 +1119,30 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     //↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたから。いつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーー
     Log(logStream, "Application Ended");
 
+
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+
     // 解放処理
   // [元からある解放群]
     vertexResource->Release();
     graphicsPipelineState->Release();
     materialResource->Release();
 
-    // ★追加: 行列リソースの解放
+    // 行列リソースの解放
     if (wvpResource) { wvpResource->Release(); }
+
+    if (srvDescriptorHeap) {
+        srvDescriptorHeap->Release();
+    }
 
     if (errorBlob) { errorBlob->Release(); }
     rootSignature->Release();
     pixelShaderBlob->Release();
     vertexShaderBlob->Release();
 
-    // ★追加: DXC関連の解放
+    //  DXC関連の解放
     if (includeHandler) { includeHandler->Release(); }
     if (dxcCompiler) { dxcCompiler->Release(); }
     if (dxcUtils) { dxcUtils->Release(); }
