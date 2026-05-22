@@ -12,13 +12,15 @@
 #include <format>
 #include <dxgidebug.h>
 #include <dxcapi.h>
+
+#ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-
+#endif
 
 //libのリンク-- -
 #pragma comment(lib, "d3d12.lib")
@@ -464,9 +466,11 @@ IDxcBlob* CompileShader(
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
     WPARAM wparam, LPARAM lparam) {
+#ifdef USE_IMGUI
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
         return true;
     }
+#endif
     switch (msg) {
         // ウィンドウが破棄された
     case WM_DESTROY:
@@ -931,6 +935,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
     // ImGuiの初期化。詳細はさして重要ではないので解説は省略する。
 // こういうもんである
+#ifdef USE_IMGUI
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -943,7 +948,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Build();
-
+#endif
 
 
 #ifdef _DEBUG
@@ -986,6 +991,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             DispatchMessage(&msg);
         }
         else {
+#ifdef USE_IMGUI
             // imguiのフレーム開始
             ImGui_ImplDX12_NewFrame();
             ImGui_ImplWin32_NewFrame();
@@ -994,6 +1000,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             // 開発用UIの処理。実際に開発用UIを出す場合はここをゲーム固有の処理に置き換える
             ImGui::ShowDemoWindow();
 
+#endif
             // 固定データ・ゲームの更新処理
             transform.rotate.y += 0.03f; // 毎フレーム回転させる
 
@@ -1063,15 +1070,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             // wvp用のCBufferの場所を設定（スロット1）
             commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
+#ifdef USE_IMGUI
             // ImGuiの内部コマンドを生成する
             ImGui::Render();
-
+#endif
             
             // 描画！（DrawCall/ドローコール）。3頂点で1つのインスタンス。
             commandList->DrawInstanced(3, 1, 0, 0);
 
+#ifdef USE_IMGUI
             // 実際のcommandListのImGuiの描画コマンドを積む
             ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+#endif
 
 
             // 画面に描く処理はすべて終わり、画面に映すので、状態を遷移
@@ -1119,10 +1129,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     //↓AIが追加したほうがファイルに目印ができてわかりやすいと言ってたから。いつ消しても害なしーーーーーーーーーーーーーーーーーーーーーーーーーーーー
     Log(logStream, "Application Ended");
 
-
+#ifdef USE_IMGUI
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
+#endif
 
     // 解放処理
   // [元からある解放群]
