@@ -215,9 +215,9 @@ Matrix4x4 MakeRotateYMatrix(float radian) {
     float s = std::sin(radian);
     float c = std::cos(radian);
     return {
-        c,    0.0f, -s,   0.0f, // ここが -s
+        c,    0.0f, s,   0.0f, // ここが -s
         0.0f, 1.0f, 0.0f, 0.0f,
-        s,    0.0f, c,    0.0f, // ここが s
+        -s,    0.0f, c,    0.0f, // ここが s
         0.0f, 0.0f, 0.0f, 1.0f
     };
 }
@@ -967,7 +967,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
             Matrix4x4 viewMatrix = Inverse(cameraMatrix);
             
+            // WVP行列の合成 (World -> View -> Projection の順で乗算)
+            Matrix4x4 worldViewMatrix = Multiply(worldMatrix, viewMatrix);
+            Matrix4x4 worldViewProjectionMatrix = Multiply(worldViewMatrix, projectionMatrix);
 
+            // 合成したWVP行列を定数バッファに書き込む
+            *wvpData = worldViewProjectionMatrix;
             
 
 
