@@ -833,6 +833,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
     assert(SUCCEEDED(hr));
 
+      // ルートシグネチャの設定
+    D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
+   
 
     // テクスチャ用のDescriptorRangeの設定
     D3D12_DESCRIPTOR_RANGE descriptorRange[1]{};
@@ -860,6 +863,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange;        // 作成したレンジを紐付け
     rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange);
 
+    descriptionRootSignature.pParameters = rootParameters;
+    descriptionRootSignature.NumParameters = _countof(rootParameters); // 自動的に「3」になります
+
     // 6枚目のスライド：StaticSamplerの設定を追加
     D3D12_STATIC_SAMPLER_DESC staticSamplers[1]{};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR; // バイリニアフィルタ（綺麗に引き伸ばす）
@@ -871,10 +877,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     staticSamplers[0].ShaderRegister = 0;         // register(s0)の「0」
     staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
 
-    // ルートシグネチャの設定
-    D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
-    descriptionRootSignature.pParameters = rootParameters;
-    descriptionRootSignature.NumParameters = _countof(rootParameters); // 自動的に「3」になります
+  
 
     // サンプラーをルートシグネチャに紐付けます
     descriptionRootSignature.pStaticSamplers = staticSamplers;
@@ -1151,10 +1154,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             // imguiのフレーム開始
             ImGui_ImplDX12_NewFrame();
             ImGui_ImplWin32_NewFrame();
+            
             ImGui::NewFrame();
 
             // 開発用UIの処理。実際に開発用UIを出す場合はここをゲーム固有の処理に置き換える
             ImGui::ShowDemoWindow();
+
+            ImGui::Begin("Developer Window");
+
+          
+            // 引数: "ラベル名", float型の配列へのポインタ（x, y, z, w がちょうど[0]〜[3]に対応します）
+            ImGui::ColorEdit4("Material Color", &materialData->color.x);
+
+            ImGui::End();
 
 #endif
             // 固定データ・ゲームの更新処理
@@ -1231,7 +1243,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             commandList->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
 
             // ★3つ目のコードを適用（変数名を現在のコードに合わせて最適化しています）
-            D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+         
             commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 #ifdef USE_IMGUI
