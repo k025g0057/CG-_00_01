@@ -82,7 +82,7 @@ struct TransformationMatrix {
 // 頂点データ構造体
 struct VertexData {
     Vector4 position;
-    Vector2 texcoord; 
+    Vector2 texcoord;
 };
 
 
@@ -534,9 +534,9 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
     resourceDesc.SampleDesc.Count = 1; // サンプリングカウント。1固定。
     resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION(metadata.dimension); // Textureの次元数。普段使っているのは2次元
 
- 
 
-   
+
+
     D3D12_HEAP_PROPERTIES heapProperties{};
     heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT; // スライドのコード
 
@@ -850,7 +850,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
     Log(logStream, "Complete create RTVs!!!\n");
 
-    
+
     ID3D12Fence* fence = nullptr;
     uint64_t fenceValue = 0;
     hr = device->CreateFence(fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
@@ -873,9 +873,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
     assert(SUCCEEDED(hr));
 
-      // ルートシグネチャの設定
+    // ルートシグネチャの設定
     D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
-   
+
 
     // テクスチャ用のDescriptorRangeの設定
     D3D12_DESCRIPTOR_RANGE descriptorRange[1]{};
@@ -917,7 +917,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     staticSamplers[0].ShaderRegister = 0;         // register(s0)の「0」
     staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
 
-  
+
 
     // サンプラーをルートシグネチャに紐付けます
     descriptionRootSignature.pStaticSamplers = staticSamplers;
@@ -1084,6 +1084,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -5.0f} };
 
     Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+
+    bool showSecondTriangle = true;
+
+    int selectTextureIndex = 0;
 
     // --- Resourceにデータを書き込むの内容 ---
 
@@ -1253,6 +1257,46 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // SRVの生成
     device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
+
+    DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
+    const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
+    ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
+
+    // データの転送 (定義済みの UploadTextureData を活用)
+    ID3D12Resource* intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
+
+    // ※UploadTextureData内でコマンドが積まれるため、一度実行して完了を待ち、アロケータをリセットします
+    commandList->Close();
+    ID3D12CommandList* commandLists2[] = { commandList };
+    commandQueue->ExecuteCommandLists(1, commandLists2);
+    fenceValue++;
+    commandQueue->Signal(fence, fenceValue);
+    if (fence->GetCompletedValue() < fenceValue) {
+        fence->SetEventOnCompletion(fenceValue, fenceEvent);
+        WaitForSingleObject(fenceEvent, INFINITE);
+    }
+    commandAllocator->Reset();
+    commandList->Reset(commandAllocator, nullptr);
+
+    intermediateResource2->Release(); // アップロード用一時リソースの解放
+
+    // monsterBall用のSRV設定
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2{};
+    srvDesc2.Format = metadata2.format;
+    srvDesc2.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc2.Texture2D.MipLevels = UINT(metadata2.mipLevels);
+
+    // 2番目の場所（ImGuiから2個後ろ、uvCheckerの1個後ろ）のハンドルを計算
+    D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    UINT descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    textureSrvHandleCPU2.ptr += descriptorSize * 2; // 先頭から2個分ずらす
+
+    // 2枚目のSRVの生成
+    device->CreateShaderResourceView(textureResource2, &srvDesc2, textureSrvHandleCPU2);
+
+
+
     MSG msg{};
     // ウィンドウの×ボタンが押されるまでループ
     while (msg.message != WM_QUIT) {
@@ -1266,7 +1310,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             // imguiのフレーム開始
             ImGui_ImplDX12_NewFrame();
             ImGui_ImplWin32_NewFrame();
-            
+
             ImGui::NewFrame();
 
             // 開発用UIの処理。実際に開発用UIを出す場合はここをゲーム固有の処理に置き換える
@@ -1274,15 +1318,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
             ImGui::Begin("Developer Window");
 
-          
+
             // 引数: "ラベル名", float型の配列へのポインタ（x, y, z, w がちょうど[0]〜[3]に対応します）
             ImGui::ColorEdit4("Material Color", &materialData->color.x);
+            ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f, 0.0f, 10.0f);
+            ImGui::SliderFloat3("Rotate", &transform.rotate.x, -3.1415f, 3.1415f); // ラジアン（約 -π 〜 π）で指定
+            ImGui::DragFloat3("Position", &transform.translate.x, 0.05f, -10.0f, 10.0f);
+            ImGui::Checkbox("Show Second Triangle", &showSecondTriangle);
+
+            ImGui::Separator();
+            ImGui::Text("Select Texture");
+            ImGui::RadioButton("uvChecker", &selectTextureIndex, 0);
+            ImGui::SameLine(); // 横並びにする
+            ImGui::RadioButton("monsterBall", &selectTextureIndex, 1);
 
             ImGui::End();
 
 #endif
-            // 固定データ・ゲームの更新処理
-            transform.rotate.y += 0.03f; // 毎フレーム回転させる
+           
 
             // 1. 各種行列の計算合成 (World -> View -> Projection)
             Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
@@ -1316,7 +1369,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             commandList->ResourceBarrier(1, &barrier);
 
 
-           
+
 
             // 指定した色で画面全体をクリアする
             float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f }; // 青っぽい色
@@ -1360,17 +1413,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             ID3D12DescriptorHeap* pHeaps[] = { srvDescriptorHeap };
             commandList->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
 
-            // ★3つ目のコードを適用（変数名を現在のコードに合わせて最適化しています）
-         
-            commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+            // ★修正: 選択中のテクスチャに応じて、コマンドリストに渡すGPUハンドルの位置を切り替える
+            D3D12_GPU_DESCRIPTOR_HANDLE finalSrvHandleGPU = textureSrvHandleGPU; // 基本は1番目(uvChecker)
+            if (selectTextureIndex == 1) {
+                // monsterBallが選ばれていたら、ディスクリプタ1個分後ろ（2番目）にずらす
+                UINT descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                finalSrvHandleGPU.ptr += descriptorSize;
+            }
+
+            // 修正したハンドルをセット
+            commandList->SetGraphicsRootDescriptorTable(2, finalSrvHandleGPU);
 
 #ifdef USE_IMGUI
             // ImGuiの内部コマンドを生成する
             ImGui::Render();
 #endif
 
-            // 描画！（DrawCall/ドローコール）。6頂点で1つのインスタンス。
-            commandList->DrawInstanced(6, 1, 0, 0);
+            if (showSecondTriangle) {
+                commandList->DrawInstanced(6, 1, 0, 0); // 2枚とも描画
+            }
+            else {
+                commandList->DrawInstanced(3, 1, 0, 0); // 1枚目のみ描画
+            }
 
 #ifdef USE_IMGUI
             // 実際のcommandListのImGuiの描画コマンドを積む
@@ -1436,6 +1500,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     materialResource->Release();
     textureResource->Release();
 
+    if (textureResource2) {
+        textureResource2->Release();
+    }
+
     if (depthStencilResource) {
         depthStencilResource->Release();
     }
@@ -1460,10 +1528,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     CloseHandle(fenceEvent);
     fence->Release();
     rtvDescriptorHeap->Release();
-     dsvDescriptorHeap->Release();
-  
+    dsvDescriptorHeap->Release();
 
-    
+
+
 
     for (int i = 0; i < 2; ++i) {
         swapChainResources[i]->Release();
@@ -1478,7 +1546,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     if (useAdapter) { useAdapter->Release(); }
     if (dxgiFactory) { dxgiFactory->Release(); }
 
-    
+
 
     // 最後にデバイスを解放
     device->Release();
@@ -1492,6 +1560,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
         debug->Release();
     }
-    
+
     return 0;
 }
