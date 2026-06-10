@@ -286,7 +286,17 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspect, float nearZ, float 
     };
 }
 
-
+Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip) {
+    Matrix4x4 result = {};
+    result.m[0][0] = 2.0f / (right - left);
+    result.m[1][1] = 2.0f / (top - bottom);
+    result.m[2][2] = 1.0f / (farClip - nearClip);
+    result.m[3][0] = (left + right) / (left - right);
+    result.m[3][1] = (top + bottom) / (bottom - top);
+    result.m[3][2] = nearClip / (nearClip - farClip);
+    result.m[3][3] = 1.0f;
+    return result;
+}
 
 // --- スライド「CrashHandlerの登録」: 関数定義 ---
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
@@ -1058,6 +1068,41 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     vertexBufferView.StrideInBytes = sizeof(VertexData);
 
 
+    // Sprite用の頂点リソースを作る
+    ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
+
+    // 頂点バッファビューを作成する
+    D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
+    // リソースの先頭のアドレスから使う
+    vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
+    // 使用するリソースのサイズは頂点6つ分のサイズ
+    vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 6;
+    // 1頂点あたりのサイズ
+    vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
+
+
+    VertexData* vertexDataSprite = nullptr;
+    vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
+    // 1枚目の三角形
+    vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f }; // 左下
+    vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
+
+    vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 左上
+    vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
+
+    vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f }; // 右下
+    vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
+    // 2枚目の三角形
+    vertexDataSprite[3].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 左上
+    vertexDataSprite[3].texcoord = { 0.0f, 0.0f };
+
+    vertexDataSprite[4].position = { 640.0f, 0.0f, 0.0f, 1.0f }; // 右上
+    vertexDataSprite[4].texcoord = { 1.0f, 0.0f };
+
+    vertexDataSprite[5].position = { 640.0f, 360.0f, 0.0f, 1.0f }; // 右下
+    vertexDataSprite[5].texcoord = { 1.0f, 1.0f };
+
+
 
     // --- MaterialResourceを生成する ---
 // マテリアル用のリソース（CBuffer）を作る
@@ -1080,6 +1125,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
     // 2. Transform変数を作る
     Transform transform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
+
+
+
+    // Sprite用のTransformationMatrix用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
+    ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
+    // データを書き込む
+    Matrix4x4* transformationMatrixDataSprite = nullptr;
+    // 書き込むためのアドレスを取得
+    transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixDataSprite));
+    // 単位行列を書きこんでおく
+    *transformationMatrixDataSprite = MakeIdentity4x4();
+
+    Transform transformSprite{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
+
+
 
     Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -5.0f} };
 
@@ -1294,7 +1354,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             *wvpData = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
 
-
+            // SpriteのTransformからWorldMatrixを作る
+            Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
+            // 2DなのでViewProjeccetionは単位行列でよい
+            Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
+            Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+            // WVPを作成
+            Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
+            // データを転送する
+            *transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
 
 
             // これから書き込むバックバッファのインデックスを取得
@@ -1370,6 +1438,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #endif
 
             // 描画！（DrawCall/ドローコール）。6頂点で1つのインスタンス。
+            commandList->DrawInstanced(6, 1, 0, 0);
+
+            commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+            // TransformationMatrixCBufferの場所を設定
+            commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+            // 描画！（DrawCall／ドローコール）
             commandList->DrawInstanced(6, 1, 0, 0);
 
 #ifdef USE_IMGUI
@@ -1462,11 +1536,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     rtvDescriptorHeap->Release();
      dsvDescriptorHeap->Release();
   
-
+     if (vertexResourceSprite) { vertexResourceSprite->Release(); }
     
 
     for (int i = 0; i < 2; ++i) {
         swapChainResources[i]->Release();
+    }
+
+    if (transformationMatrixResourceSprite) {
+        transformationMatrixResourceSprite->Release();
     }
 
     swapChain->Release();
