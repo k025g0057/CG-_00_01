@@ -35,8 +35,11 @@ PixelShaderOutput main(VertexShaderOutput input)
     // ＝★ 【スライドの通り変更】ライティング計算の追加 ＝
     if (gMaterial.enableLighting != 0)
     { // Lightingする場合
-        // 法線と「光の逆向き（-gDirectionalLight.direction）」の内積（当たっている角度）を求め、[0, 1]に収める
-        float32_t cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
+        // 1. 法線とライトの逆向きの内積（NdotL）を求める（ここではsaturateせず [-1, 1] のまま）
+        float32_t NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
+
+        // 2. [-1, 1] の範囲を [0, 1] に変換して2乗する： (NdotL * 0.5 + 0.5)^2
+        float32_t cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
         
         // テクスチャ、マテリアル、ライトの色、当たり具合（cos）、明るさをすべて掛け合わせる
         output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
