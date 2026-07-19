@@ -1117,32 +1117,46 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
 
 
+    // Resourceを作成する。1つあたりのIndexのサイズは32bitとするので、必要なサイズは32bit*6
+    ID3D12Resource* indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
+
+    // Viewを作成する。Indexに対応したViewはIndexBufferView(IBV)である
+    D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
+    // リソースの先頭のアドレスから使う
+    indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
+    // 使用するリソースのサイズはインデックス6つ分のサイズ
+    indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
+    // インデックスはuint32_tとする
+    indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
+
+
     VertexData* vertexDataSprite = nullptr;
     vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
-    // 1枚目の三角形
-    vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f }; // 左下
+    vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f }; // 0: 左下
     vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
-    vertexDataSprite[0].normal = { 0.0f, 0.0f, 1.0f }; // 法線
+    vertexDataSprite[0].normal = { 0.0f, 0.0f, 1.0f };
 
-    vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 左上
+    vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f };   // 1: 左上
     vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
-    vertexDataSprite[1].normal = { 0.0f, 0.0f, 1.0f }; // 法線
+    vertexDataSprite[1].normal = { 0.0f, 0.0f, 1.0f };
 
-    vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f }; // 右下
+    vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f }; // 2: 右下
     vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
-    vertexDataSprite[2].normal = { 0.0f, 0.0f, 1.0f }; // 法線
-    // 2枚目の三角形
-    vertexDataSprite[3].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 左上
-    vertexDataSprite[3].texcoord = { 0.0f, 0.0f };
-    vertexDataSprite[3].normal = { 0.0f, 0.0f, 1.0f }; // 法線    
+    vertexDataSprite[2].normal = { 0.0f, 0.0f, 1.0f };
 
-    vertexDataSprite[4].position = { 640.0f, 0.0f, 0.0f, 1.0f }; // 右上
-    vertexDataSprite[4].texcoord = { 1.0f, 0.0f };
-	vertexDataSprite[4].normal = { 0.0f, 0.0f, 1.0f }; // 法線
+    vertexDataSprite[3].position = { 640.0f, 0.0f, 0.0f, 1.0f };   // 3: 右上
+    vertexDataSprite[3].texcoord = { 1.0f, 0.0f };
+    vertexDataSprite[3].normal = { 0.0f, 0.0f, 1.0f };
 
-    vertexDataSprite[5].position = { 640.0f, 360.0f, 0.0f, 1.0f }; // 右下
-    vertexDataSprite[5].texcoord = { 1.0f, 1.0f };
-    vertexDataSprite[5].normal = { 0.0f, 0.0f, 1.0f }; // 法線
+
+    uint32_t* indexDataSprite = nullptr;
+    indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSprite));
+
+    // 1枚目の三角形 (0, 1, 2)
+    indexDataSprite[0] = 0;    indexDataSprite[1] = 1;    indexDataSprite[2] = 2;
+
+    // 2枚目の三角形 (1, 3, 2)  ★ここが重要です！
+    indexDataSprite[3] = 1;    indexDataSprite[4] = 3;    indexDataSprite[5] = 2;
 
 
 
@@ -1212,7 +1226,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // デフォルト値の設定（真上から白いライトで照らす）
     directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     directionalLightData->direction = { 0.0f, -1.0f, 0.0f };
-    directionalLightData->intensity = 1.0f;
+    directionalLightData->intensity = 2.0f;
     // ===================================================================
 
 
@@ -1664,14 +1678,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
             commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
-            commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
-
             // ＝★ ②こちらはSprite用のまま「6」で残しておきます！ ★＝
             commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+
+            commandList->IASetIndexBuffer(&indexBufferViewSprite); // IBVを設定
+
+            commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+
             // TransformationMatrixCBufferの場所を設定
             commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
             // 描画！（DrawCall／ドローコール）
-            commandList->DrawInstanced(6, 1, 0, 0);
+            commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 #ifdef USE_IMGUI
             // 実際のcommandListのImGuiの描画コマンドを積む
@@ -1736,7 +1753,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     graphicsPipelineState->Release();
     materialResource->Release();
     textureResource->Release();
-    materialResource->Release();
     materialResourceSprite->Release();
 
     if (textureResource2) {
@@ -1772,6 +1788,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
      dsvDescriptorHeap->Release();
   
      if (vertexResourceSprite) { vertexResourceSprite->Release(); }
+
+     if (indexResourceSprite) { indexResourceSprite->Release(); }
     
 
     for (int i = 0; i < 2; ++i) {
