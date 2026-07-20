@@ -62,6 +62,13 @@ struct Transform {
     Vector3 translate; // 平行移動
 };
 
+struct Matrix4x4 {
+    float m[4][4];
+};
+
+struct Matrix3x3 {
+    float m[3][3];
+};
 
 
 
@@ -69,11 +76,10 @@ struct Transform {
 struct Material {
     Vector4 color;
     int32_t enableLighting;
+    float padding[3];
+    Matrix4x4 uvTransform;
 };
 
-struct Matrix4x4 {
-    float m[4][4];
-};
 
 
 struct TransformationMatrix {
@@ -1172,6 +1178,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
     materialData->enableLighting = true;
 
+    materialData->uvTransform = MakeIdentity4x4();
+
     // ==========================================
     // Sprite用のマテリアルリソースを作る
     // ==========================================
@@ -1182,6 +1190,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     materialDataSprite->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     // SpriteはLightingしないのでfalseを設定する
     materialDataSprite->enableLighting = false;
+
+    materialDataSprite->uvTransform = MakeIdentity4x4();
     // ==========================================
 
 
@@ -1215,6 +1225,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     Transform transformSprite{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
 
     Vector3 cameraRotateDeg = { 0.0f, 0.0f, 0.0f };
+
+    Transform uvTransformSprite{
+    { 1.0f, 1.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f },
+    { 0.0f, 0.0f, 0.0f },
+    };
 
     // ===================================================================
     // 平行光源用のResourceを作成し、値を設定する ＝
@@ -1570,7 +1586,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
             }
             ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 10.0f);
 
+            ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+            ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+            ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+
             ImGui::End();
+
+            Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
+            uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
+            uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
+            materialDataSprite->uvTransform = uvTransformMatrix;
 
 #endif
             // 固定データ・ゲームの更新処理
