@@ -20,17 +20,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #pragma comment(lib, "dxcompiler.lib")
 
 // --- 行列・数学関数 ---
-Matrix4x4 Multiply(const Matrix4x4& m1, const Matrix4x4& m2) {
-    Matrix4x4 result = { 0 };
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                result.m[i][j] += m1.m[i][k] * m2.m[k][j];
-            }
-        }
-    }
-    return result;
-}
 
 Matrix4x4 MakeIdentity4x4() {
     return {
@@ -41,100 +30,7 @@ Matrix4x4 MakeIdentity4x4() {
     };
 }
 
-Matrix4x4 Inverse(const Matrix4x4& m) {
-    float a[4][8];
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            a[i][j] = m.m[i][j];
-            a[i][j + 4] = (i == j) ? 1.0f : 0.0f;
-        }
-    }
-    for (int i = 0; i < 4; ++i) {
-        int pivot = i;
-        for (int j = i + 1; j < 4; ++j) {
-            if (std::abs(a[j][i]) > std::abs(a[pivot][i])) pivot = j;
-        }
-        std::swap(a[i], a[pivot]);
-        float temp = a[i][i];
-        if (std::abs(temp) < 1e-6f) return MakeIdentity4x4();
-        for (int j = 0; j < 8; ++j) a[i][j] /= temp;
-        for (int j = 0; j < 4; ++j) {
-            if (i != j) {
-                float factor = a[j][i];
-                for (int k = 0; k < 8; ++k) a[j][k] -= factor * a[i][k];
-            }
-        }
-    }
-    Matrix4x4 result;
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            result.m[i][j] = a[i][j + 4];
-        }
-    }
-    return result;
-}
 
-Matrix4x4 MakeScaleMatrix(const Vector3& scale) {
-    return {
-        scale.x, 0.0f, 0.0f, 0.0f,
-        0.0f, scale.y, 0.0f, 0.0f,
-        0.0f, 0.0f, scale.z, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-}
-
-Matrix4x4 MakeTranslateMatrix(const Vector3& translate) {
-    return {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        translate.x, translate.y, translate.z, 1.0f
-    };
-}
-
-Matrix4x4 MakeRotateXMatrix(float radian) {
-    float s = std::sin(radian);
-    float c = std::cos(radian);
-    return {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, c, s, 0.0f,
-        0.0f, -s, c, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-}
-
-Matrix4x4 MakeRotateYMatrix(float radian) {
-    float s = std::sin(radian);
-    float c = std::cos(radian);
-    return {
-        c, 0.0f, -s, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        s, 0.0f, c, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-}
-
-Matrix4x4 MakeRotateZMatrix(float radian) {
-    float s = std::sin(radian);
-    float c = std::cos(radian);
-    return {
-        c, s, 0.0f, 0.0f,
-        -s, c, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-}
-
-Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate) {
-    Matrix4x4 sMatrix = MakeScaleMatrix(scale);
-    Matrix4x4 rXMatrix = MakeRotateXMatrix(rotate.x);
-    Matrix4x4 rYMatrix = MakeRotateYMatrix(rotate.y);
-    Matrix4x4 rZMatrix = MakeRotateZMatrix(rotate.z);
-    Matrix4x4 tMatrix = MakeTranslateMatrix(translate);
-
-    Matrix4x4 rXYZMatrix = Multiply(rXMatrix, Multiply(rYMatrix, rZMatrix));
-    return Multiply(sMatrix, Multiply(rXYZMatrix, tMatrix));
-}
 
 Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspect, float nearZ, float farZ) {
     float h = 1.0f / std::tan(fovY / 2.0f);
@@ -253,6 +149,7 @@ void Engine::Initialize(HINSTANCE hInstance, int nCmdShow, int32_t width, int32_
     soundData1 = sound.SoundLoadWave("Resources/botan.wav");
 
     input.Initialize(wc_.hInstance, hwnd_);
+    debugCamera_.Initialize(&input);
 }
 
 void Engine::InitializeLog() {
@@ -752,6 +649,7 @@ void Engine::Run() {
 
 void Engine::Update() {
     input.Update();
+    debugCamera_.Update();
 
     if (input.PushKey(DIK_0)) {
         OutputDebugStringA("Hit 0\n"); // 出力ウィンドウに「Hit 0」と表示されるかテスト
@@ -766,14 +664,7 @@ void Engine::Update() {
     ImGui::Begin("Settings");
 
     ImGui::Checkbox("Draw Sphere", &drawSphere_);
-    ImGui::DragFloat3("CameraTranslate", &cameraTransform_.translate.x, 0.05f);
-    ImGui::SliderFloat("CameraRotateX", &cameraRotateDeg_.x, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("CameraRotateY", &cameraRotateDeg_.y, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("CameraRotateZ", &cameraRotateDeg_.z, -360.0f, 360.0f, "%.0f deg");
-
-    ImGui::SliderFloat("SphereRotateX", &modelRotateDeg_.x, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("SphereRotateY", &modelRotateDeg_.y, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("SphereRotateZ", &modelRotateDeg_.z, -360.0f, 360.0f, "%.0f deg");
+   
 
     ImGui::ColorEdit4("color", &materialData_->color.x, ImGuiColorEditFlags_Uint8);
 
@@ -825,7 +716,7 @@ void Engine::Update() {
 
     Matrix4x4 worldMatrix = MakeAffineMatrix(transform_.scale, transform_.rotate, transform_.translate);
     Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform_.scale, cameraTransform_.rotate, cameraTransform_.translate);
-    Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+    Matrix4x4 viewMatrix = debugCamera_.GetViewMatrix();
 
     wvpData_->wvp = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix_));
     wvpData_->World = worldMatrix;
@@ -836,6 +727,7 @@ void Engine::Update() {
     
     transformationMatrixDataSprite_->wvp = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
     transformationMatrixDataSprite_->World = worldMatrixSprite;
+   
 }
 
 void Engine::Draw() {
@@ -871,22 +763,10 @@ void Engine::Draw() {
     commandList_->SetPipelineState(graphicsPipelineState_.Get());
     commandList_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    if (drawSphere_) {
-        commandList_->IASetVertexBuffers(0, 1, &vertexBufferViewSphere_);
-        commandList_->DrawInstanced(kNumSphereVertices_, 1, 0, 0);
-    }
-    else {
-        commandList_->IASetVertexBuffers(0, 1, &vertexBufferViewPlane_);
-        commandList_->DrawInstanced(UINT(modelData_.vertices.size()), 1, 0, 0);
-    }
+    commandList_->IASetVertexBuffers(0, 1, &vertexBufferViewSphere_);
+    commandList_->DrawInstanced(kNumSphereVertices_, 1, 0, 0);
 
-    // Sprite 描画
-    commandList_->SetGraphicsRootConstantBufferView(0, materialResourceSprite_->GetGPUVirtualAddress());
-    commandList_->IASetVertexBuffers(0, 1, &vertexBufferViewSprite_);
-    commandList_->IASetIndexBuffer(&indexBufferViewSprite_);
-    commandList_->SetGraphicsRootDescriptorTable(2, useMonsterBall_ ? textureSrvHandleGPU2_ : textureSrvHandleGPU_);
-    commandList_->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite_->GetGPUVirtualAddress());
-    commandList_->DrawIndexedInstanced(6, 1, 0, 0, 0);
+   
 
 #ifdef USE_IMGUI
     ImGui::Render();
