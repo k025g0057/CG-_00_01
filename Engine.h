@@ -21,6 +21,7 @@
 #include <sstream>
 #include <wrl.h>
 #include "Sound.h"
+#include "Input.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -220,4 +221,6 @@ private:
 
     Sound sound;
     SoundData soundData1;
+
+    Input input;
 };
