@@ -22,6 +22,8 @@
 #include <wrl.h>
 #include "Sound.h"
 #include "Input.h"
+#include "MathTypes.h"
+#include "DebugCamera.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -31,18 +33,6 @@ using Microsoft::WRL::ComPtr;
 #include "externals/imgui/imgui_impl_win32.h"
 #endif
 
-// 構造体群
-struct Vector4 { float x, y, z, w; };
-struct Vector3 { float x, y, z; };
-struct Vector2 { float x, y; };
-
-struct Transform {
-    Vector3 scale;
-    Vector3 rotate;
-    Vector3 translate;
-};
-
-struct Matrix4x4 { float m[4][4]; };
 
 struct Material {
     Vector4 color;
@@ -97,6 +87,8 @@ public:
 
     // ウィンドウプロシージャ
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+
+    DebugCamera* GetDebugCamera() { return &debugCamera_; } 
 
 private:
     // 内部初期化ステップ
@@ -223,4 +215,6 @@ private:
     SoundData soundData1;
 
     Input input;
+
+    DebugCamera debugCamera_;
 };
