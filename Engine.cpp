@@ -251,6 +251,8 @@ void Engine::Initialize(HINSTANCE hInstance, int nCmdShow, int32_t width, int32_
     // サウンドの初期化と読み込み
     sound.Initialize();
     soundData1 = sound.SoundLoadWave("Resources/botan.wav");
+
+    input.Initialize(wc_.hInstance, hwnd_);
 }
 
 void Engine::InitializeLog() {
@@ -749,6 +751,12 @@ void Engine::Run() {
 }
 
 void Engine::Update() {
+    input.Update();
+
+    if (input.PushKey(DIK_0)) {
+        OutputDebugStringA("Hit 0\n"); // 出力ウィンドウに「Hit 0」と表示されるかテスト
+    }
+
 #ifdef USE_IMGUI
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();
