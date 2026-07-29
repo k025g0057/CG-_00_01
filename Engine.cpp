@@ -846,6 +846,12 @@ void Engine::Update() {
         }
 
         ImGui::TreePop();
+
+        if (ImGui::Button("Play Sound")) {
+            sound.SoundPlayWave(soundData1); // ボタン押下時に効果音を再生
+        }
+
+        ImGui::Separator();
     }
 
     ImGui::End();
