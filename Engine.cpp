@@ -586,7 +586,7 @@ void Engine::InitializeResources() {
     materialResource_ = CreateBufferResource(sizeof(Material));
     materialResource_->Map(0, nullptr, reinterpret_cast<void**>(&materialData_));
     materialData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    materialData_->enableLighting = true;
+    materialData_->enableLighting = false;
     materialData_->lightingModel = 0; // ★ 0: Lambertian Reflectance, 1: Half-Lambert
     materialData_->uvTransform = MakeIdentity4x4();
 
