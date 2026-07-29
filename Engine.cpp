@@ -476,7 +476,7 @@ void Engine::InitializePipeline() {
     blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
     D3D12_RASTERIZER_DESC rasterizerDesc{};
-    rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
+    rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;;
     rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 
     ComPtr<IDxcBlob> vertexShaderBlob = CompileShader(L"Object3D.VS.hlsl", L"vs_6_0");
@@ -587,6 +587,7 @@ void Engine::InitializeResources() {
     materialResource_->Map(0, nullptr, reinterpret_cast<void**>(&materialData_));
     materialData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     materialData_->enableLighting = true;
+    materialData_->lightingModel = 0; // ★ 0: Lambertian Reflectance, 1: Half-Lambert
     materialData_->uvTransform = MakeIdentity4x4();
 
     materialResourceSprite_ = CreateBufferResource(sizeof(Material));
@@ -754,78 +755,127 @@ void Engine::Update() {
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::ShowDemoWindow();
     ImGui::Begin("Settings");
 
     ImGui::Checkbox("Draw Sphere", &drawSphere_);
-    ImGui::DragFloat3("CameraTranslate", &cameraTransform_.translate.x, 0.05f);
-    ImGui::SliderFloat("CameraRotateX", &cameraRotateDeg_.x, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("CameraRotateY", &cameraRotateDeg_.y, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("CameraRotateZ", &cameraRotateDeg_.z, -360.0f, 360.0f, "%.0f deg");
 
-    ImGui::SliderFloat("SphereRotateX", &modelRotateDeg_.x, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("SphereRotateY", &modelRotateDeg_.y, -360.0f, 360.0f, "%.0f deg");
-    ImGui::SliderFloat("SphereRotateZ", &modelRotateDeg_.z, -360.0f, 360.0f, "%.0f deg");
+    
 
-    ImGui::ColorEdit4("color", &materialData_->color.x, ImGuiColorEditFlags_Uint8);
+    ImGui::Separator(); // 見やすさのための区切り線
 
-    bool enableLightingBool = (materialData_->enableLighting != 0);
-    if (ImGui::Checkbox("enableLighting", &enableLightingBool)) {
-        materialData_->enableLighting = enableLightingBool ? 1 : 0;
+   
+
+    // ----------------------------------------------------
+    // 1. Model (plane.obj の SRT 操作)
+    // ----------------------------------------------------
+    ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+    if (ImGui::TreeNode("Model")) {
+        ImGui::DragFloat3("Scale", &transform_.scale.x, 0.01f);
+        ImGui::DragFloat3("Rotate", &transform_.rotate.x, 0.01f);
+        ImGui::DragFloat3("Translate", &transform_.translate.x, 0.01f);
+        ImGui::TreePop();
     }
 
-    ImGui::ColorEdit4("colorSprite", &materialDataSprite_->color.x, ImGuiColorEditFlags_Uint8);
-    ImGui::DragFloat3("translateSprite", &transformSprite_.translate.x, 1.0f);
-    ImGui::Checkbox("useMonsterBall", &useMonsterBall_);
+    // ----------------------------------------------------
+    // 2. Sprite (スプライトの SRT & UV 操作)
+    // ----------------------------------------------------
+    ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+    if (ImGui::TreeNode("Sprite")) {
+        // スプライト自身の Transform 操作
+        ImGui::DragFloat3("Scale", &transformSprite_.scale.x, 0.01f);
+        ImGui::DragFloat3("Rotate", &transformSprite_.rotate.x, 0.01f);
+        ImGui::DragFloat3("Translate", &transformSprite_.translate.x, 0.01f);
 
-    ImGui::ColorEdit3("LightColor", &directionalLightData_->color.x, ImGuiColorEditFlags_Uint8);
-    if (ImGui::DragFloat3("LightDirection", &directionalLightData_->direction.x, 0.01f, -1.0f, 1.0f)) {
-        float length = std::sqrt(
-            directionalLightData_->direction.x * directionalLightData_->direction.x +
-            directionalLightData_->direction.y * directionalLightData_->direction.y +
-            directionalLightData_->direction.z * directionalLightData_->direction.z
-        );
-        if (length > 0.0f) {
-            directionalLightData_->direction.x /= length;
-            directionalLightData_->direction.y /= length;
-            directionalLightData_->direction.z /= length;
+        // ★ UV Transform 操作 (Scale, Rotate, Translate)
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+        if (ImGui::TreeNode("UV")) {
+            ImGui::DragFloat2("UV Scale", &uvTransformSprite_.scale.x, 0.01f, -10.0f, 10.0f);
+            ImGui::SliderAngle("UV Rotate", &uvTransformSprite_.rotate.z);
+            ImGui::DragFloat2("UV Translate", &uvTransformSprite_.translate.x, 0.01f, -10.0f, 10.0f);
+            ImGui::TreePop();
         }
+
+        ImGui::TreePop();
     }
-    ImGui::DragFloat("Intensity", &directionalLightData_->intensity, 0.01f, 0.0f, 10.0f);
 
-    ImGui::DragFloat2("UVTranslate", &uvTransformSprite_.translate.x, 0.01f, -10.0f, 10.0f);
-    ImGui::DragFloat2("UVScale", &uvTransformSprite_.scale.x, 0.01f, -10.0f, 10.0f);
-    ImGui::SliderAngle("UVRotate", &uvTransformSprite_.rotate.z);
+    // ----------------------------------------------------
+    // 3. Camera (カメラ操作)
+    // ----------------------------------------------------
+    ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+    if (ImGui::TreeNode("Camera")) {
+        ImGui::DragFloat3("Rotate", &cameraTransform_.rotate.x, 0.01f);
+        ImGui::DragFloat3("Translate", &cameraTransform_.translate.x, 0.01f);
+        ImGui::TreePop();
+    }
 
-    if (ImGui::Button("Play Alarm")) {
-        sound.SoundPlayWave(soundData1);
+    // ----------------------------------------------------
+    // 4. Light (平行光源設定)
+    // ----------------------------------------------------
+    ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+    if (ImGui::TreeNode("Light")) {
+        ImGui::ColorEdit3("Color", &directionalLightData_->color.x);
+
+        if (ImGui::DragFloat3("Direction", &directionalLightData_->direction.x, 0.01f, -1.0f, 1.0f)) {
+            float length = std::sqrt(
+                directionalLightData_->direction.x * directionalLightData_->direction.x +
+                directionalLightData_->direction.y * directionalLightData_->direction.y +
+                directionalLightData_->direction.z * directionalLightData_->direction.z
+            );
+            if (length > 0.0f) {
+                directionalLightData_->direction.x /= length;
+                directionalLightData_->direction.y /= length;
+                directionalLightData_->direction.z /= length;
+            }
+        }
+        ImGui::DragFloat("Intensity", &directionalLightData_->intensity, 0.01f, 0.0f, 10.0f);
+        ImGui::TreePop();
+    }
+
+    ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+    if (ImGui::TreeNode("Lighting Reflectance")) {
+        // 1. ライティングの有効 / 無効 切り替え
+        bool enableLighting = (materialData_->enableLighting != 0);
+        if (ImGui::Checkbox(" Lighting ON OFF", &enableLighting)) {
+            materialData_->enableLighting = enableLighting ? 1 : 0;
+        }
+
+        // 2. ライティングモデルの切り替え (0: Lambertian, 1: Half-Lambert)
+        if (materialData_->enableLighting != 0) {
+            const char* lightingModels[] = { "Lambertian Reflectance", "Half-Lambert" };
+            ImGui::Combo("Type", &materialData_->lightingModel, lightingModels, IM_ARRAYSIZE(lightingModels));
+        }
+
+        ImGui::TreePop();
     }
 
     ImGui::End();
-
-    cameraTransform_.rotate.x = cameraRotateDeg_.x * (std::numbers::pi_v<float> / 180.0f);
-    cameraTransform_.rotate.y = cameraRotateDeg_.y * (std::numbers::pi_v<float> / 180.0f);
-    cameraTransform_.rotate.z = cameraRotateDeg_.z * (std::numbers::pi_v<float> / 180.0f);
-
-    transform_.rotate.x = modelRotateDeg_.x * (std::numbers::pi_v<float> / 180.0f);
-    transform_.rotate.y = modelRotateDeg_.y * (std::numbers::pi_v<float> / 180.0f);
-    transform_.rotate.z = modelRotateDeg_.z * (std::numbers::pi_v<float> / 180.0f);
 #endif
 
+    // --- 行列の計算と転送 ---
+
+    // 1. Sprite の UV 行列の計算と転送
     Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransformSprite_.scale, uvTransformSprite_.rotate, uvTransformSprite_.translate);
     materialDataSprite_->uvTransform = uvTransformMatrix;
 
-    Matrix4x4 worldMatrix = MakeAffineMatrix(transform_.scale, transform_.rotate, transform_.translate);
+    // 2. Model (plane.obj) のワールド行列と WVP 行列の計算
+    Vector3 modelRotate = transform_.rotate;
+    if (!drawSphere_) {
+        // plane.obj 描画時は反転を防ぐため Y 軸を 180度 (pi rad) ひっくり返す
+        modelRotate.y += std::numbers::pi_v<float>;
+    }
+
+    Matrix4x4 worldMatrix = MakeAffineMatrix(transform_.scale, modelRotate, transform_.translate);
     Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform_.scale, cameraTransform_.rotate, cameraTransform_.translate);
     Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 
     wvpData_->wvp = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix_));
     wvpData_->World = worldMatrix;
 
+    // 3. Sprite のワールド行列と 2D 正射影行列の計算
     Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite_.scale, transformSprite_.rotate, transformSprite_.translate);
     Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
     Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth_), float(kClientHeight_), 0.0f, 100.0f);
-    
+
     transformationMatrixDataSprite_->wvp = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
     transformationMatrixDataSprite_->World = worldMatrixSprite;
 }
@@ -863,11 +913,17 @@ void Engine::Draw() {
     commandList_->SetPipelineState(graphicsPipelineState_.Get());
     commandList_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+    // --- 3Dモデル描画切り替え ---
     if (drawSphere_) {
+        // 球体 (Sphere) の描画
+        commandList_->SetGraphicsRootDescriptorTable(2, useMonsterBall_ ? textureSrvHandleGPU2_ : textureSrvHandleGPU_);
         commandList_->IASetVertexBuffers(0, 1, &vertexBufferViewSphere_);
         commandList_->DrawInstanced(kNumSphereVertices_, 1, 0, 0);
     }
     else {
+        // 平面 (plane.obj) の描画
+        // plane.obj 用のテクスチャ (textureSrvHandleGPU2_) をバインド
+        commandList_->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU2_);
         commandList_->IASetVertexBuffers(0, 1, &vertexBufferViewPlane_);
         commandList_->DrawInstanced(UINT(modelData_.vertices.size()), 1, 0, 0);
     }

@@ -44,10 +44,11 @@ struct Transform {
 struct Matrix4x4 { float m[4][4]; };
 
 struct Material {
-    Vector4 color;
-    int32_t enableLighting;
-    float padding[3];
-    Matrix4x4 uvTransform;
+    Vector4 color;          // 16 bytes
+    int32_t enableLighting; // 4 bytes
+    int32_t lightingModel;  // 4 bytes (0: Lambertian, 1: Half-Lambert)
+    float padding[2];       // 8 bytes (計16バイトアライメント)
+    Matrix4x4 uvTransform;  // 64 bytes
 };
 
 struct TransformationMatrix {
