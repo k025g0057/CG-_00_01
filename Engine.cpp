@@ -649,7 +649,6 @@ void Engine::Run() {
 
 void Engine::Update() {
     input.Update();
-    debugCamera_.Update();
 
     if (input.PushKey(DIK_0)) {
         OutputDebugStringA("Hit 0\n"); // 出力ウィンドウに「Hit 0」と表示されるかテスト
@@ -702,6 +701,9 @@ void Engine::Update() {
 
     ImGui::End();
 
+    // ImGui のウィンドウやウィジェットがマウスを使っている間はカメラを操作しない。
+    debugCamera_.Update(!ImGui::GetIO().WantCaptureMouse);
+
     cameraTransform_.rotate.x = cameraRotateDeg_.x * (std::numbers::pi_v<float> / 180.0f);
     cameraTransform_.rotate.y = cameraRotateDeg_.y * (std::numbers::pi_v<float> / 180.0f);
     cameraTransform_.rotate.z = cameraRotateDeg_.z * (std::numbers::pi_v<float> / 180.0f);
@@ -709,6 +711,10 @@ void Engine::Update() {
     transform_.rotate.x = modelRotateDeg_.x * (std::numbers::pi_v<float> / 180.0f);
     transform_.rotate.y = modelRotateDeg_.y * (std::numbers::pi_v<float> / 180.0f);
     transform_.rotate.z = modelRotateDeg_.z * (std::numbers::pi_v<float> / 180.0f);
+#endif
+
+#ifndef USE_IMGUI
+    debugCamera_.Update();
 #endif
 
     Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransformSprite_.scale, uvTransformSprite_.rotate, uvTransformSprite_.translate);
