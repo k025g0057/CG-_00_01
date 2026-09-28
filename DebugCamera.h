@@ -9,7 +9,7 @@ public:
     // 初期化
     void Initialize(Input* input);
     // 更新
-    void Update();
+    void Update(bool inputEnabled = true);
 
     const Matrix4x4& GetViewMatrix() const { return viewMatrix_; }
 

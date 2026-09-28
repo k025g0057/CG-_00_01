@@ -13,7 +13,7 @@ void DebugCamera::Initialize(Input* input) {
     translation_.z = target_.z - distance_ * std::cos(rotation_.y) * std::cos(rotation_.x);
 }
 
-void DebugCamera::Update() {
+void DebugCamera::Update(bool inputEnabled) {
     // ==================================================
     // ① マウス移動量の計算
     // ==================================================
@@ -24,6 +24,11 @@ void DebugCamera::Update() {
     float deltaY = static_cast<float>(currentPos.y - prevMousePos_.y);
 
     prevMousePos_ = currentPos;
+
+    // ImGui が入力中ならカメラ操作を止める。位置を更新しておき、解除時の飛びを防ぐ。
+    if (!inputEnabled) {
+        return;
+    }
 
     const float rotSpeed = 0.005f; // 回転速度
 
